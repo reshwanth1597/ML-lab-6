@@ -1,0 +1,1433 @@
+# ============================================================
+# LAB SESSION 05
+# k-NEAREST NEIGHBORS (kNN)
+# ============================================================
+
+# Import NumPy for numerical operations
+import numpy as np
+
+# Import Pandas for reading and processing the dataset
+import pandas as pd
+
+# Import Matplotlib for plotting graphs
+import matplotlib.pyplot as plt
+
+# Import train_test_split for splitting the dataset
+from sklearn.model_selection import train_test_split
+
+# Import KNeighborsClassifier for comparison
+from sklearn.neighbors import KNeighborsClassifier
+
+# Import LabelEncoder for converting categorical data to numbers
+from sklearn.preprocessing import LabelEncoder
+
+
+# ============================================================
+# A1(a) CATEGORICAL DATA ENCODING
+# ============================================================
+
+def encode_categorical_data(df):
+
+    # Create a copy of the original dataframe
+    encoded_df = df.copy()
+
+    # Dictionary to store encoders
+    encoders = {}
+
+    # Process every column
+    for column in encoded_df.columns:
+
+        # Check whether the column contains categorical data
+        if encoded_df[column].dtype == "object":
+
+            # Create LabelEncoder
+            encoder = LabelEncoder()
+
+            # Replace missing values and convert to string
+            encoded_df[column] = (
+                encoded_df[column]
+                .fillna("Missing")
+                .astype(str)
+                .str.strip()
+            )
+
+            # Convert categorical values to numbers
+            encoded_df[column] = encoder.fit_transform(
+                encoded_df[column]
+            )
+
+            # Store encoder
+            encoders[column] = encoder
+
+    # Return encoded dataframe and encoders
+    return encoded_df, encoders
+
+
+# ============================================================
+# A1(b) MISSING VALUE IMPUTATION
+# ============================================================
+
+def impute_missing_values(df, strategy="mean"):
+
+    # Make a copy of dataframe
+    result = df.copy()
+
+    # Process every column
+    for column in result.columns:
+
+        # Check whether missing values exist
+        if result[column].isnull().any():
+
+            # Replace missing values with mean
+            if strategy == "mean":
+                value = result[column].mean()
+
+            # Replace missing values with median
+            elif strategy == "median":
+                value = result[column].median()
+
+            # Replace missing values with mode
+            elif strategy == "mode":
+                value = result[column].mode()[0]
+
+            else:
+                raise ValueError(
+                    "Strategy must be mean, median or mode."
+                )
+
+            # Fill missing values
+            result[column] = result[column].fillna(value)
+
+    # Return processed dataframe
+    return result
+
+
+# ============================================================
+# A1(c) DISTANCE FUNCTIONS
+# ============================================================
+
+# Euclidean distance
+def euclidean_distance(point1, point2):
+
+    # Convert points to NumPy arrays
+    point1 = np.asarray(point1, dtype=float)
+    point2 = np.asarray(point2, dtype=float)
+
+    # Calculate Euclidean distance
+    return np.sqrt(
+        np.sum((point1 - point2) ** 2)
+    )
+
+
+# Manhattan distance
+def manhattan_distance(point1, point2):
+
+    # Convert points to NumPy arrays
+    point1 = np.asarray(point1, dtype=float)
+    point2 = np.asarray(point2, dtype=float)
+
+    # Calculate Manhattan distance
+    return np.sum(
+        np.abs(point1 - point2)
+    )
+
+
+# Select distance metric
+def calculate_distance(
+    point1,
+    point2,
+    metric="euclidean"
+):
+
+    # Use Euclidean distance
+    if metric == "euclidean":
+        return euclidean_distance(
+            point1,
+            point2
+        )
+
+    # Use Manhattan distance
+    elif metric == "manhattan":
+        return manhattan_distance(
+            point1,
+            point2
+        )
+
+    # Invalid distance metric
+    else:
+        raise ValueError(
+            "Metric must be euclidean or manhattan."
+        )
+
+
+# ============================================================
+# A1(d) BUBBLE SORT
+# ============================================================
+
+def bubble_sort(distances):
+
+    # Make a copy of distances
+    arr = distances.copy()
+
+    # Number of elements
+    n = len(arr)
+
+    # Bubble sort
+    for i in range(n):
+
+        for j in range(
+            0,
+            n - i - 1
+        ):
+
+            # Compare distances
+            if arr[j][0] > arr[j + 1][0]:
+
+                # Swap elements
+                arr[j], arr[j + 1] = (
+                    arr[j + 1],
+                    arr[j]
+                )
+
+    return arr
+
+
+# ============================================================
+# SELECTION SORT
+# ============================================================
+
+def selection_sort(distances):
+
+    # Make a copy
+    arr = distances.copy()
+
+    # Number of elements
+    n = len(arr)
+
+    # Selection sort
+    for i in range(n):
+
+        # Assume current element is minimum
+        min_index = i
+
+        # Search for smaller element
+        for j in range(
+            i + 1,
+            n
+        ):
+
+            if arr[j][0] < arr[min_index][0]:
+                min_index = j
+
+        # Swap
+        arr[i], arr[min_index] = (
+            arr[min_index],
+            arr[i]
+        )
+
+    return arr
+
+
+# ============================================================
+# INSERTION SORT
+# ============================================================
+
+def insertion_sort(distances):
+
+    # Make a copy
+    arr = distances.copy()
+
+    # Start from second element
+    for i in range(
+        1,
+        len(arr)
+    ):
+
+        # Store current element
+        key = arr[i]
+
+        # Previous element
+        j = i - 1
+
+        # Shift larger elements
+        while (
+            j >= 0
+            and arr[j][0] > key[0]
+        ):
+
+            arr[j + 1] = arr[j]
+
+            j -= 1
+
+        # Insert key
+        arr[j + 1] = key
+
+    return arr
+
+
+# ============================================================
+# SORTING FUNCTION
+# ============================================================
+
+def sort_distances(
+    distances,
+    algorithm="bubble"
+):
+
+    # Select Bubble Sort
+    if algorithm == "bubble":
+        return bubble_sort(distances)
+
+    # Select Selection Sort
+    elif algorithm == "selection":
+        return selection_sort(distances)
+
+    # Select Insertion Sort
+    elif algorithm == "insertion":
+        return insertion_sort(distances)
+
+    else:
+        raise ValueError(
+            "Algorithm must be bubble, selection or insertion."
+        )
+
+
+# ============================================================
+# A1(e) FIND K NEAREST NEIGHBORS
+# ============================================================
+
+def identify_neighbors(
+    X_train,
+    y_train,
+    test_point,
+    k,
+    metric="euclidean",
+    sorting_algorithm="bubble"
+):
+
+    # Store distances
+    distances = []
+
+    # Calculate distance from test point
+    # to every training point
+    for index in range(
+        len(X_train)
+    ):
+
+        distance = calculate_distance(
+            test_point,
+            X_train[index],
+            metric
+        )
+
+        # Store distance, class and index
+        distances.append(
+            (
+                distance,
+                y_train[index],
+                index
+            )
+        )
+
+    # Sort distances
+    sorted_distances = sort_distances(
+        distances,
+        sorting_algorithm
+    )
+
+    # Return first k neighbors
+    return sorted_distances[:k]
+
+
+# ============================================================
+# A1(f) MAJORITY VOTING
+# ============================================================
+
+def majority_vote(neighbors):
+
+    # Dictionary to count votes
+    votes = {}
+
+    # Count each class
+    for distance, label, index in neighbors:
+
+        votes[label] = (
+            votes.get(label, 0) + 1
+        )
+
+    # Find maximum votes
+    maximum_votes = max(
+        votes.values()
+    )
+
+    # Find classes having maximum votes
+    candidates = [
+        label
+        for label, count in votes.items()
+        if count == maximum_votes
+    ]
+
+    # If there is no tie
+    if len(candidates) == 1:
+        return candidates[0]
+
+    # Tie-breaking using nearest neighbor
+    for distance, label, index in neighbors:
+
+        if label in candidates:
+            return label
+
+
+# ============================================================
+# CUSTOM kNN CLASSIFIER
+# ============================================================
+
+class CustomKNN:
+
+    # Constructor
+    def __init__(
+        self,
+        k=3,
+        metric="euclidean",
+        sorting_algorithm="bubble"
+    ):
+
+        self.k = k
+        self.metric = metric
+        self.sorting_algorithm = sorting_algorithm
+
+        self.X_train = None
+        self.y_train = None
+
+
+    # Fit method
+    def fit(self, X, y):
+
+        # Store training features
+        self.X_train = np.asarray(
+            X,
+            dtype=float
+        )
+
+        # Store training labels
+        self.y_train = np.asarray(y)
+
+        return self
+
+
+    # Predict one sample
+    def predict_single(
+        self,
+        test_point
+    ):
+
+        # Find nearest neighbors
+        neighbors = identify_neighbors(
+            self.X_train,
+            self.y_train,
+            test_point,
+            self.k,
+            self.metric,
+            self.sorting_algorithm
+        )
+
+        # Perform majority voting
+        return majority_vote(
+            neighbors
+        )
+
+
+    # Predict multiple samples
+    def predict(self, X):
+
+        # Convert input to NumPy array
+        X = np.asarray(
+            X,
+            dtype=float
+        )
+
+        # Store predictions
+        predictions = []
+
+        # Predict every test point
+        for test_point in X:
+
+            prediction = self.predict_single(
+                test_point
+            )
+
+            predictions.append(
+                prediction
+            )
+
+        return np.asarray(
+            predictions
+        )
+
+
+    # Calculate accuracy
+    def score(self, X, y):
+
+        # Generate predictions
+        predictions = self.predict(X)
+
+        # Convert actual values
+        y = np.asarray(y)
+
+        # Calculate accuracy
+        return np.mean(
+            predictions == y
+        )
+
+
+# ============================================================
+# A2 WEIGHTED kNN
+# ============================================================
+
+def weighted_vote(neighbors):
+
+    # Store weights for each class
+    class_weights = {}
+
+    # Process each neighbor
+    for distance, label, index in neighbors:
+
+        # If distance is zero, return immediately
+        if distance == 0:
+            return label
+
+        # Weight is inverse of distance
+        weight = 1.0 / distance
+
+        # Add weight to class
+        class_weights[label] = (
+            class_weights.get(label, 0)
+            + weight
+        )
+
+    # Find maximum weight
+    maximum_weight = max(
+        class_weights.values()
+    )
+
+    # Find classes with maximum weight
+    candidates = [
+        label
+        for label, weight in class_weights.items()
+        if weight == maximum_weight
+    ]
+
+    # Return class if no tie
+    if len(candidates) == 1:
+        return candidates[0]
+
+    # Tie-breaking
+    for distance, label, index in neighbors:
+
+        if label in candidates:
+            return label
+
+
+# ============================================================
+# WEIGHTED kNN CLASSIFIER
+# ============================================================
+
+class WeightedKNN:
+
+    def __init__(
+        self,
+        k=3,
+        metric="euclidean",
+        sorting_algorithm="bubble"
+    ):
+
+        self.k = k
+        self.metric = metric
+        self.sorting_algorithm = sorting_algorithm
+
+        self.X_train = None
+        self.y_train = None
+
+
+    # Fit model
+    def fit(self, X, y):
+
+        self.X_train = np.asarray(
+            X,
+            dtype=float
+        )
+
+        self.y_train = np.asarray(y)
+
+        return self
+
+
+    # Predict samples
+    def predict(self, X):
+
+        X = np.asarray(
+            X,
+            dtype=float
+        )
+
+        predictions = []
+
+        for test_point in X:
+
+            neighbors = identify_neighbors(
+                self.X_train,
+                self.y_train,
+                test_point,
+                self.k,
+                self.metric,
+                self.sorting_algorithm
+            )
+
+            prediction = weighted_vote(
+                neighbors
+            )
+
+            predictions.append(
+                prediction
+            )
+
+        return np.asarray(
+            predictions
+        )
+
+
+    # Calculate accuracy
+    def score(self, X, y):
+
+        predictions = self.predict(X)
+
+        y = np.asarray(y)
+
+        return np.mean(
+            predictions == y
+        )
+
+
+# ============================================================
+# DATASET PREPARATION
+# ============================================================
+
+def prepare_dataset(
+    file_path,
+    target_column,
+    imputation_strategy="mean"
+):
+
+    # --------------------------------------------------------
+    # Read file manually so that ``` lines can be removed
+    # --------------------------------------------------------
+
+    with open(
+        file_path,
+        "r",
+        encoding="utf-8-sig"
+    ) as file:
+
+        lines = file.readlines()
+
+    # Remove Markdown code fence lines
+    lines = [
+        line
+        for line in lines
+        if line.strip() != "```"
+    ]
+
+    # Convert cleaned text back into a file-like object
+    from io import StringIO
+
+    csv_data = StringIO(
+        "".join(lines)
+    )
+
+    # Read CSV
+    df = pd.read_csv(
+        csv_data
+    )
+
+    # Clean column names
+    df.columns = (
+        df.columns
+        .astype(str)
+        .str.strip()
+        .str.strip("`")
+    )
+
+    # Display columns
+    print("\nColumns found:")
+    print(
+        df.columns.tolist()
+    )
+
+    # Check target column
+    if target_column not in df.columns:
+
+        raise ValueError(
+            f"Target column '{target_column}' was not found.\n"
+            f"Available columns: {df.columns.tolist()}"
+        )
+
+    # Remove completely empty columns
+    df = df.dropna(
+        axis=1,
+        how="all"
+    )
+
+    # Separate features
+    X = df.drop(
+        columns=[target_column]
+    )
+
+    # Separate target
+    y = df[target_column]
+
+    # Remove ID column
+    if "id" in X.columns:
+
+        X = X.drop(
+            columns=["id"]
+        )
+
+    # Remove date column
+    if "date" in X.columns:
+
+        X = X.drop(
+            columns=["date"]
+        )
+
+    # Encode categorical feature columns
+    X, feature_encoders = (
+        encode_categorical_data(X)
+    )
+
+    # Initialize target encoder
+    target_encoder = None
+
+    # Encode categorical target
+    if y.dtype == "object":
+
+        target_encoder = LabelEncoder()
+
+        y = (
+            y.astype(str)
+            .str.strip()
+        )
+
+        y = target_encoder.fit_transform(
+            y
+        )
+
+    else:
+
+        y = pd.to_numeric(
+            y,
+            errors="coerce"
+        ).to_numpy()
+
+    # Convert feature values to numbers
+    X = X.apply(
+        pd.to_numeric,
+        errors="coerce"
+    )
+
+    # Remove columns containing only NaN
+    X = X.dropna(
+        axis=1,
+        how="all"
+    )
+
+    # Fill missing values
+    X = impute_missing_values(
+        X,
+        strategy=imputation_strategy
+    )
+
+    # Convert features to NumPy
+    X = X.to_numpy(
+        dtype=float
+    )
+
+    # Convert target to NumPy
+    y = np.asarray(y)
+
+    # Find rows where target is not missing
+    valid_rows = ~pd.isna(y)
+
+    # Select valid rows
+    X = X[valid_rows]
+    y = y[valid_rows]
+
+    # Return processed data
+    return (
+        X,
+        y,
+        feature_encoders,
+        target_encoder
+    )
+
+
+# ============================================================
+# A3 TRAIN TEST SPLIT
+# ============================================================
+
+def split_dataset(
+    X,
+    y,
+    test_size=0.30
+):
+
+    # Split dataset into training and testing sets
+    return train_test_split(
+        X,
+        y,
+        test_size=test_size,
+        random_state=42,
+        stratify=y
+    )
+
+
+# ============================================================
+# SCIKIT-LEARN kNN
+# ============================================================
+
+def sklearn_knn_experiment(
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    k=3
+):
+
+    # Create sklearn kNN model
+    model = KNeighborsClassifier(
+        n_neighbors=k
+    )
+
+    # Train model
+    model.fit(
+        X_train,
+        y_train
+    )
+
+    # Make predictions
+    predictions = model.predict(
+        X_test
+    )
+
+    # Calculate accuracy
+    accuracy = model.score(
+        X_test,
+        y_test
+    )
+
+    return (
+        model,
+        predictions,
+        accuracy
+    )
+
+
+# ============================================================
+# COMPARE CUSTOM AND SCIKIT-LEARN kNN
+# ============================================================
+
+def compare_knn_models(
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    k_values
+):
+
+    # Lists to store accuracy
+    custom_accuracies = []
+    sklearn_accuracies = []
+
+    # Test every k
+    for k in k_values:
+
+        # Create custom kNN
+        custom_model = CustomKNN(
+            k=k,
+            metric="euclidean",
+            sorting_algorithm="bubble"
+        )
+
+        # Train custom model
+        custom_model.fit(
+            X_train,
+            y_train
+        )
+
+        # Calculate custom accuracy
+        custom_accuracy = (
+            custom_model.score(
+                X_test,
+                y_test
+            )
+        )
+
+        custom_accuracies.append(
+            custom_accuracy
+        )
+
+        # Create sklearn model
+        sklearn_model = (
+            KNeighborsClassifier(
+                n_neighbors=k
+            )
+        )
+
+        # Train sklearn model
+        sklearn_model.fit(
+            X_train,
+            y_train
+        )
+
+        # Calculate sklearn accuracy
+        sklearn_accuracy = (
+            sklearn_model.score(
+                X_test,
+                y_test
+            )
+        )
+
+        sklearn_accuracies.append(
+            sklearn_accuracy
+        )
+
+    return (
+        custom_accuracies,
+        sklearn_accuracies
+    )
+
+
+# ============================================================
+# WEIGHTED kNN COMPARISON
+# ============================================================
+
+def compare_weighted_knn(
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    k_values
+):
+
+    # Store weighted kNN accuracies
+    weighted_accuracies = []
+
+    # Test different values of k
+    for k in k_values:
+
+        # Create weighted kNN
+        model = WeightedKNN(
+            k=k,
+            metric="euclidean",
+            sorting_algorithm="bubble"
+        )
+
+        # Train model
+        model.fit(
+            X_train,
+            y_train
+        )
+
+        # Calculate accuracy
+        accuracy = model.score(
+            X_test,
+            y_test
+        )
+
+        # Store accuracy
+        weighted_accuracies.append(
+            accuracy
+        )
+
+    return weighted_accuracies
+
+
+# ============================================================
+# ACCURACY GRAPH
+# ============================================================
+
+def plot_comparison(
+    k_values,
+    custom_accuracies,
+    sklearn_accuracies,
+    weighted_accuracies
+):
+
+    # Create graph
+    plt.figure(
+        figsize=(10, 6)
+    )
+
+    # Plot custom kNN
+    plt.plot(
+        k_values,
+        custom_accuracies,
+        marker="o",
+        label="Custom kNN"
+    )
+
+    # Plot sklearn kNN
+    plt.plot(
+        k_values,
+        sklearn_accuracies,
+        marker="s",
+        label="Scikit-learn kNN"
+    )
+
+    # Plot weighted kNN
+    plt.plot(
+        k_values,
+        weighted_accuracies,
+        marker="^",
+        label="Weighted kNN"
+    )
+
+    # Add x-axis label
+    plt.xlabel(
+        "Value of k"
+    )
+
+    # Add y-axis label
+    plt.ylabel(
+        "Accuracy"
+    )
+
+    # Add title
+    plt.title(
+        "kNN Accuracy Comparison"
+    )
+
+    # Display legend
+    plt.legend()
+
+    # Display grid
+    plt.grid(
+        True
+    )
+
+    # Show graph
+    plt.show()
+
+
+# ============================================================
+# MAIN FUNCTION
+# ============================================================
+
+def main():
+
+    # --------------------------------------------------------
+    # DATASET FILE NAME
+    # --------------------------------------------------------
+
+    FILE_PATH = "covid_data.csv"
+
+    # If your actual file is covid_data(1).csv,
+    # change the above line to:
+    #
+    # FILE_PATH = "covid_data(1).csv"
+
+    # Target column
+    TARGET_COLUMN = "covid_status"
+
+
+    # --------------------------------------------------------
+    # PREPARE DATASET
+    # --------------------------------------------------------
+
+    X, y, feature_encoders, target_encoder = (
+        prepare_dataset(
+            FILE_PATH,
+            TARGET_COLUMN,
+            imputation_strategy="mean"
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # DISPLAY DATASET INFORMATION
+    # --------------------------------------------------------
+
+    print(
+        "\n========================================"
+    )
+
+    print(
+        "DATASET INFORMATION"
+    )
+
+    print(
+        "========================================"
+    )
+
+    print(
+        "Number of samples:",
+        X.shape[0]
+    )
+
+    print(
+        "Number of features:",
+        X.shape[1]
+    )
+
+    print(
+        "Target classes:",
+        np.unique(y)
+    )
+
+
+    # --------------------------------------------------------
+    # A3 TRAIN TEST SPLIT
+    # --------------------------------------------------------
+
+    X_train, X_test, y_train, y_test = (
+        split_dataset(
+            X,
+            y,
+            test_size=0.30
+        )
+    )
+
+    print(
+        "\n========================================"
+    )
+
+    print(
+        "TRAIN TEST SPLIT"
+    )
+
+    print(
+        "========================================"
+    )
+
+    print(
+        "Training samples:",
+        len(X_train)
+    )
+
+    print(
+        "Testing samples:",
+        len(X_test)
+    )
+
+
+    # --------------------------------------------------------
+    # CUSTOM kNN WITH k = 3
+    # --------------------------------------------------------
+
+    custom_model = CustomKNN(
+        k=3,
+        metric="euclidean",
+        sorting_algorithm="bubble"
+    )
+
+    # Train custom kNN
+    custom_model.fit(
+        X_train,
+        y_train
+    )
+
+    # Calculate accuracy
+    custom_accuracy = (
+        custom_model.score(
+            X_test,
+            y_test
+        )
+    )
+
+    print(
+        "\n========================================"
+    )
+
+    print(
+        "CUSTOM kNN"
+    )
+
+    print(
+        "========================================"
+    )
+
+    print(
+        "k = 3"
+    )
+
+    print(
+        "Accuracy:",
+        round(
+            custom_accuracy,
+            4
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # CUSTOM PREDICTIONS
+    # --------------------------------------------------------
+
+    custom_predictions = (
+        custom_model.predict(
+            X_test
+        )
+    )
+
+    print(
+        "\nFirst 20 Custom Predictions:"
+    )
+
+    print(
+        custom_predictions[:20]
+    )
+
+
+    # --------------------------------------------------------
+    # SCIKIT-LEARN kNN
+    # --------------------------------------------------------
+
+    (
+        sklearn_model,
+        sklearn_predictions,
+        sklearn_accuracy
+    ) = sklearn_knn_experiment(
+        X_train,
+        X_test,
+        y_train,
+        y_test,
+        k=3
+    )
+
+    print(
+        "\n========================================"
+    )
+
+    print(
+        "SCIKIT-LEARN kNN"
+    )
+
+    print(
+        "========================================"
+    )
+
+    print(
+        "k = 3"
+    )
+
+    print(
+        "Accuracy:",
+        round(
+            sklearn_accuracy,
+            4
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # SCIKIT-LEARN PREDICTIONS
+    # --------------------------------------------------------
+
+    print(
+        "\nFirst 20 Scikit-learn Predictions:"
+    )
+
+    print(
+        sklearn_predictions[:20]
+    )
+
+
+    # --------------------------------------------------------
+    # TEST DIFFERENT VALUES OF k
+    # --------------------------------------------------------
+
+    max_k = min(
+        15,
+        len(X_train)
+    )
+
+    # Use odd values of k
+    k_values = [
+        k
+        for k in range(
+            1,
+            max_k + 1,
+            2
+        )
+    ]
+
+
+    # --------------------------------------------------------
+    # COMPARE CUSTOM AND SKLEARN
+    # --------------------------------------------------------
+
+    (
+        custom_accuracies,
+        sklearn_accuracies
+    ) = compare_knn_models(
+        X_train,
+        X_test,
+        y_train,
+        y_test,
+        k_values
+    )
+
+
+    # --------------------------------------------------------
+    # WEIGHTED kNN
+    # --------------------------------------------------------
+
+    weighted_accuracies = (
+        compare_weighted_knn(
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            k_values
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # CREATE RESULTS TABLE
+    # --------------------------------------------------------
+
+    results = pd.DataFrame({
+
+        "k": list(k_values),
+
+        "Custom kNN":
+            custom_accuracies,
+
+        "Scikit-learn kNN":
+            sklearn_accuracies,
+
+        "Weighted kNN":
+            weighted_accuracies
+    })
+
+
+    # --------------------------------------------------------
+    # DISPLAY RESULTS
+    # --------------------------------------------------------
+
+    print(
+        "\n========================================"
+    )
+
+    print(
+        "ACCURACY COMPARISON"
+    )
+
+    print(
+        "========================================"
+    )
+
+    print(
+        results.to_string(
+            index=False
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # FIND BEST CUSTOM kNN
+    # --------------------------------------------------------
+
+    best_custom_index = np.argmax(
+        custom_accuracies
+    )
+
+    # Find best sklearn kNN
+    best_sklearn_index = np.argmax(
+        sklearn_accuracies
+    )
+
+    # Find best weighted kNN
+    best_weighted_index = np.argmax(
+        weighted_accuracies
+    )
+
+
+    # --------------------------------------------------------
+    # DISPLAY BEST RESULTS
+    # --------------------------------------------------------
+
+    print(
+        "\n========================================"
+    )
+
+    print(
+        "BEST RESULTS"
+    )
+
+    print(
+        "========================================"
+    )
+
+    print(
+        "Best Custom kNN: k =",
+        list(k_values)[
+            best_custom_index
+        ],
+        "Accuracy =",
+        round(
+            custom_accuracies[
+                best_custom_index
+            ],
+            4
+        )
+    )
+
+    print(
+        "Best Scikit-learn kNN: k =",
+        list(k_values)[
+            best_sklearn_index
+        ],
+        "Accuracy =",
+        round(
+            sklearn_accuracies[
+                best_sklearn_index
+            ],
+            4
+        )
+    )
+
+    print(
+        "Best Weighted kNN: k =",
+        list(k_values)[
+            best_weighted_index
+        ],
+        "Accuracy =",
+        round(
+            weighted_accuracies[
+                best_weighted_index
+            ],
+            4
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # PLOT RESULTS
+    # --------------------------------------------------------
+
+    plot_comparison(
+        list(k_values),
+        custom_accuracies,
+        sklearn_accuracies,
+        weighted_accuracies
+    )
+
+
+# ============================================================
+# RUN PROGRAM
+# ============================================================
+
+if __name__ == "__main__":
+
+    main()
